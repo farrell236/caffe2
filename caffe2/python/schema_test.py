@@ -1,3 +1,18 @@
+# Copyright (c) 2016-present, Facebook, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+##############################################################################
+
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -8,6 +23,7 @@ import numpy as np
 
 import unittest
 import pickle
+import random
 
 
 class TestDB(unittest.TestCase):
@@ -69,10 +85,12 @@ class TestDB(unittest.TestCase):
     def testStructIndexing(self):
         s = schema.Struct(
             ('field1', schema.Scalar(dtype=np.int32)),
-            ('field2', schema.List(schema.Scalar(dtype=str)))
+            ('field2', schema.List(schema.Scalar(dtype=str))),
+            ('field3', schema.Struct()),
         )
         self.assertEquals(s['field2'], s.field2)
         self.assertEquals(s['field2'], schema.List(schema.Scalar(dtype=str)))
+        self.assertEquals(s['field3'], schema.Struct())
         self.assertEquals(
             s['field2', 'field1'],
             schema.Struct(
@@ -88,7 +106,7 @@ class TestDB(unittest.TestCase):
             ('field2', a)
         )
         self.assertEquals(s['field2:lengths'], a.lengths)
-        self.assertEquals(s['field2:items'], a.items)
+        self.assertEquals(s['field2:values'], a.items)
         with self.assertRaises(KeyError):
             s['fields2:items:non_existent']
         with self.assertRaises(KeyError):
@@ -103,8 +121,8 @@ class TestDB(unittest.TestCase):
             ('field1', schema.Scalar(dtype=np.int32)),
             ('field2', a)
         )
-        self.assertEquals(s['field2:keys'], a.keys)
-        self.assertEquals(s['field2:values'], a.values)
+        self.assertEquals(s['field2:values:keys'], a.keys)
+        self.assertEquals(s['field2:values:values'], a.values)
         with self.assertRaises(KeyError):
             s['fields2:keys:non_existent']
 
@@ -153,6 +171,11 @@ class TestDB(unittest.TestCase):
                 ('a', schema.Scalar()),
                 ('a', schema.Scalar()))
 
+    def testAssignToField(self):
+        with self.assertRaises(TypeError):
+            s = schema.Struct(('a', schema.Scalar()))
+            s.a = schema.Scalar()
+
     def testPreservesEmptyFields(self):
         s = schema.Struct(
             ('a', schema.Scalar(np.float32)),
@@ -165,6 +188,46 @@ class TestDB(unittest.TestCase):
         self.assertIn("a", sv.fields)
         self.assertIn("b", sv.fields)
         self.assertEqual(0, len(sv.b.fields))
+
+    def testStructSubstraction(self):
+        s1 = schema.Struct(
+            ('a', schema.Scalar()),
+            ('b', schema.Scalar()),
+            ('c', schema.Scalar()),
+        )
+        s2 = schema.Struct(
+            ('b', schema.Scalar())
+        )
+        s = s1 - s2
+        self.assertEqual(['a', 'c'], s.field_names())
+
+        s3 = schema.Struct(
+            ('a', schema.Scalar())
+        )
+        s = s1 - s3
+        self.assertEqual(['b', 'c'], s.field_names())
+
+        with self.assertRaises(TypeError):
+            s1 - schema.Scalar()
+
+    def testStructNestedSubstraction(self):
+        s1 = schema.Struct(
+            ('a', schema.Scalar()),
+            ('b', schema.Struct(
+                ('c', schema.Scalar()),
+                ('d', schema.Scalar()),
+                ('e', schema.Scalar()),
+                ('f', schema.Scalar()),
+            )),
+        )
+        s2 = schema.Struct(
+            ('b', schema.Struct(
+                ('d', schema.Scalar()),
+                ('e', schema.Scalar()),
+            )),
+        )
+        s = s1 - s2
+        self.assertEqual(['a', 'b:c', 'b:f'], s.field_names())
 
     def testStructAddition(self):
         s1 = schema.Struct(
@@ -286,3 +349,26 @@ class TestDB(unittest.TestCase):
         self.assertFalse('x' in st)
         self.assertFalse('b:c:x' in st)
         self.assertFalse('b:c:d:x' in st)
+
+    def testFromEmptyColumnList(self):
+        st = schema.Struct()
+        columns = st.field_names()
+        rec = schema.from_column_list(col_names=columns)
+        self.assertEqual(rec, schema.Struct())
+
+    def testFromColumnList(self):
+        st = schema.Struct(
+            ('a', schema.Scalar()),
+            ('b', schema.List(schema.Scalar())),
+            ('c', schema.Map(schema.Scalar(), schema.Scalar()))
+        )
+        columns = st.field_names()
+        # test that recovery works for arbitrary order
+        for _ in range(10):
+            some_blobs = [core.BlobReference('blob:' + x) for x in columns]
+            rec = schema.from_column_list(columns, col_blobs=some_blobs)
+            self.assertTrue(rec.has_blobs())
+            self.assertEqual(sorted(st.field_names()), sorted(rec.field_names()))
+            self.assertEqual([str(blob) for blob in rec.field_blobs()],
+                             [str('blob:' + name) for name in rec.field_names()])
+            random.shuffle(columns)

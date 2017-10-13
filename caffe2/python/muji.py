@@ -1,3 +1,18 @@
+# Copyright (c) 2016-present, Facebook, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+##############################################################################
+
 ## @package muji
 # Module caffe2.python.muji
 """muji.py does multi-gpu training for caffe2 with no need to change the c++
@@ -10,7 +25,6 @@ Currently, here are the assumptions: we only support the following use cases:
     between {1, 2, 3, 4} and {5, 6, 7, 8}.
 """
 
-from caffe2.python import core
 from caffe2.proto import caffe2_pb2
 
 
@@ -34,7 +48,7 @@ def Allreduce(net, blobs, reduced_affix="_reduced", gpu_indices=None):
     """The general Allreduce interface that reroutes the function calls.
   """
     if gpu_indices is None:
-        gpu_indices = range(len(blobs))
+        gpu_indices = list(range(len(blobs)))
     if len(gpu_indices) != len(blobs):
         raise RuntimeError(
             "gpu_indices length and blobs length mismatch: %d vs %d" %

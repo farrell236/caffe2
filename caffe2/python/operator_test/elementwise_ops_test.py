@@ -1,3 +1,18 @@
+# Copyright (c) 2016-present, Facebook, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+##############################################################################
+
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -78,6 +93,29 @@ class TestElementwiseOps(hu.HypothesisTestCase):
             op=op,
             inputs=[X],
             reference=sqr_op,
+        )
+
+        self.assertGradientChecks(
+            gc, op, [X], 0, [0], stepsize=1e-4, threshold=1e-2)
+
+    @given(n=st.integers(5, 6), m=st.integers(4, 6), **hu.gcs)
+    def test_sigmoid(self, n, m, gc, dc):
+        X = np.random.rand(n, m).astype(np.float32)
+
+        def sigmoid(X):
+            return [1. / (1. + np.exp(-X))]
+
+        op = core.CreateOperator(
+            "Sigmoid",
+            ["X"],
+            ["Z"]
+        )
+
+        self.assertReferenceChecks(
+            device_option=gc,
+            op=op,
+            inputs=[X],
+            reference=sigmoid,
         )
 
         self.assertGradientChecks(

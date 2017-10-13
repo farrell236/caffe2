@@ -1,3 +1,19 @@
+/**
+ * Copyright (c) 2016-present, Facebook, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #ifndef CAFFE2_OPERATORS_PIECEWISE_LINEAR_TRANSFORM_OP_H_
 #define CAFFE2_OPERATORS_PIECEWISE_LINEAR_TRANSFORM_OP_H_
 
@@ -93,6 +109,8 @@ class PiecewiseLinearTransformOp final : public Operator<Context> {
 
     return good_param == 3;
   }
+
+  void setUpTensors(TIndex& num_func_per_group, TIndex& num_group, TIndex M);
 
   void GetTransParamData(
       const T** bounds,
@@ -230,6 +248,11 @@ class PiecewiseLinearTransformOp final : public Operator<Context> {
   vector<T> bounds_from_arg_;
   vector<T> slopes_from_arg_;
   vector<T> intercepts_from_arg_;
+
+  Tensor<Context> bounds_device_;
+  Tensor<Context> intercepts_device_;
+  Tensor<Context> slopes_device_;
+  bool gpu_copied_ = false;
 
   // If true, the piecewise linear functions are passed through args,
   // otherwise, they are passed through Input blobs.

@@ -1,5 +1,24 @@
+/**
+ * Copyright (c) 2016-present, Facebook, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #ifndef CAFFE2_CUDA_RTC_COMMON_RTC_H_
 #define CAFFE2_CUDA_RTC_COMMON_RTC_H_
+
+#include <sstream>
+#include <string>
 
 #include <cuda.h>
 #include <nvrtc.h>
@@ -99,7 +118,7 @@ class CudaRTCFunction {
 };
 
 // TODO: this is in no way unique and is just a hack right now.
-inline string GetUniqueName() {
+inline std::string GetUniqueName() {
   static constexpr int len = 20;
   static const char alpha[] =
       "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";

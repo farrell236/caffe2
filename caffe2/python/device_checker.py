@@ -1,15 +1,31 @@
+# Copyright (c) 2016-present, Facebook, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+##############################################################################
+
 ## @package device_checker
 # Module caffe2.python.device_checker
 import numpy as np
 import copy
 from caffe2.python import workspace
+from future.utils import viewitems
 
 
 class DeviceChecker(object):
     """A device checker in Python to check consistency across multiple devices.
 
     This is not the most efficient way to check devices, as the Python interface
-    will involve a lot of copy back and forth operations. Use at your own risk.
+    will involve a lot of copies back and forth operations. Use at your own risk.
     """
 
     def __init__(self, threshold, device_options):
@@ -68,18 +84,22 @@ class DeviceChecker(object):
         workspace.SwitchWorkspace(old_ws_name)
         return success
 
-    def CheckNet(self, net, inputs={}, blobs_to_check=None, ignore=set()):
+    def CheckNet(self, net, inputs=None, blobs_to_check=None, ignore=None):
         """Checks a network by inspecting all of its intermediate results, and
         see if things match.
         """
+        if inputs is None:
+            inputs = {}
+        if ignore is None:
+            ignore = set()
         old_ws_name = workspace.CurrentWorkspace()
         results = []
         if blobs_to_check is None:
             blobs_to_check = sum([list(op.output) for op in net.op], [])
         blobs_to_check = [b for b in blobs_to_check if b not in ignore]
         workspace.SwitchWorkspace("_device_check_", True)
-        for i, device_option in enumerate(self._device_options):
-            for name, arr in inputs.items():
+        for device_option in self._device_options:
+            for name, arr in viewitems(inputs):
                 # print 'feeding', name
                 workspace.FeedBlob(name, arr, device_option)
             for op in net.op:

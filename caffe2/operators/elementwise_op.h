@@ -1,3 +1,19 @@
+/**
+ * Copyright (c) 2016-present, Facebook, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #ifndef CAFFE2_OPERATORS_ELEMENTWISE_OP_H_
 #define CAFFE2_OPERATORS_ELEMENTWISE_OP_H_
 
@@ -65,7 +81,7 @@ class UnaryElementwiseWithArgsOp : public Operator<Context> {
  */
 template <typename Functor>
 struct WithDefaultConstructor {
-  explicit WithDefaultConstructor(OperatorBase& op) {}
+  explicit WithDefaultConstructor(OperatorBase& /*op*/) {}
 
   template <typename In, typename Out, typename Context>
   void operator()(int n, const In* in, Out* out, Context* c) {
@@ -225,22 +241,22 @@ struct WithoutBroadcast {
   }
   template <typename T, typename R, typename Context>
   inline void RunWithBroadcast(
-      const T* a,
-      const T* b,
-      R* out,
-      size_t pre,
-      size_t n,
+      const T* /*a*/,
+      const T* /*b*/,
+      R* /*out*/,
+      size_t /*pre*/,
+      size_t /*n*/,
       Context*) {
     CAFFE_NOT_IMPLEMENTED;
   }
   template <typename T, typename R, typename Context>
   inline void RunWithBroadcast2(
-      const T* a,
-      const T* b,
-      R* out,
-      size_t pre,
-      size_t n,
-      size_t post,
+      const T* /*a*/,
+      const T* /*b*/,
+      R* /*out*/,
+      size_t /*pre*/,
+      size_t /*n*/,
+      size_t /*post*/,
       Context*) {
     CAFFE_NOT_IMPLEMENTED;
   }
@@ -333,8 +349,8 @@ bool DivGradientOp<Context>::RunOnDevice() {
   auto& dZ = Input(2);
   auto* dX = Output(0);
   auto* dY = Output(1);
-  DCHECK_GT(Y.size(), 0);
-  DCHECK_GT(Z.size(), 0);
+  CAFFE_ENFORCE_GT(Y.size(), 0);
+  CAFFE_ENFORCE_GT(Z.size(), 0);
   dX->ResizeLike(Y);
   dY->ResizeLike(Y);
 

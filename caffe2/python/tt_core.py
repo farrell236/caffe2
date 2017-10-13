@@ -1,3 +1,18 @@
+# Copyright (c) 2016-present, Facebook, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+##############################################################################
+
 ## @package tt_core
 # Module caffe2.python.tt_core
 from __future__ import absolute_import
@@ -22,7 +37,7 @@ def init_tt_cores(inp_sizes, out_sizes, tt_ranks, seed=1234):
     """
     Initialize randomized orthogonalized TT-cores.
 
-    This method should be used when a TT-layer will trained from scratch. The
+    This method should be used when a TT-layer is trained from scratch. The
     sizes of each of the cores are specified by the inp_sizes and out_sizes, and
     the respective tt_ranks will dictate the ranks of each of the cores. Note
     that a larger set of tt_ranks will result in slower computation but will
@@ -101,7 +116,7 @@ def matrix_to_tt(W, inp_sizes, out_sizes, tt_ranks):
     """
     Convert a matrix into the TT-format.
 
-    This method will consume an a 2D weight matrix such as those used in fully
+    This method will consume a 2D weight matrix such as those used in fully
     connected layers in a neural network and will compute the TT-decomposition
     of the weight matrix and return the TT-cores of the resulting computation.
     This method should be used when converting a trained, fully connected layer,

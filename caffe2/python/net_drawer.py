@@ -1,3 +1,18 @@
+# Copyright (c) 2016-present, Facebook, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+##############################################################################
+
 ## @package net_drawer
 # Module caffe2.python.net_drawer
 from __future__ import absolute_import
@@ -9,6 +24,7 @@ import json
 import logging
 from collections import defaultdict
 from caffe2.python import utils
+from future.utils import viewitems
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -340,7 +356,7 @@ def main():
     parser = argparse.ArgumentParser(description="Caffe2 net drawer.")
     parser.add_argument(
         "--input",
-        type=str,
+        type=str, required=True,
         help="The input protobuf file."
     )
     parser.add_argument(
@@ -372,7 +388,7 @@ def main():
                 caffe2_pb2.NetDef: lambda x: {x.name: x.op},
             }
         )
-    for key, operators in graphs.items():
+    for key, operators in viewitems(graphs):
         if args.minimal:
             graph = GetPydotGraphMinimal(
                 operators,

@@ -1,3 +1,18 @@
+# Copyright (c) 2016-present, Facebook, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+##############################################################################
+
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -64,8 +79,14 @@ class TestIndexOps(TestCase):
             ['stored_entries']))
         stored_actual = workspace.FetchBlob('stored_entries')
         new_entries = np.array([entries[3], entries[4]], dtype=dtype)
-        np.testing.assert_array_equal(
-            np.concatenate((my_entries, new_entries)), stored_actual)
+        expected = np.concatenate((my_entries, new_entries))
+        if dtype is str:
+            # we'll always get bytes back from Caffe2
+            expected = np.array([
+                x.item().encode('utf-8') if isinstance(x, np.str_) else x
+                for x in expected
+            ], dtype=object)
+        np.testing.assert_array_equal(expected, stored_actual)
 
         workspace.RunOperatorOnce(core.CreateOperator(
             index_create_op,
@@ -121,10 +142,10 @@ class TestIndexOps(TestCase):
         ], str, 'StringIndexCreate')
 
     def test_int_index_ops(self):
-        self._test_index_ops(range(8), np.int32, 'IntIndexCreate')
+        self._test_index_ops(list(range(8)), np.int32, 'IntIndexCreate')
 
     def test_long_index_ops(self):
-        self._test_index_ops(range(8), np.int64, 'LongIndexCreate')
+        self._test_index_ops(list(range(8)), np.int64, 'LongIndexCreate')
 
 if __name__ == "__main__":
     import unittest

@@ -1,3 +1,18 @@
+# Copyright (c) 2016-present, Facebook, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+##############################################################################
+
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -119,7 +134,8 @@ class TestHsm(hu.HypothesisTestCase):
         for i in range(names.shape[0]):
             for j in range(names.shape[1]):
                 if names[i][j]:
-                    assert(names[i][j] == p_names[i][j])
+                    self.assertEquals(
+                        names[i][j], p_names[i][j].item().encode('utf-8'))
                     self.assertAlmostEqual(
                         scores[i][j], p_scores[i][j], delta=0.001)
 
@@ -207,7 +223,7 @@ class TestHsm(hu.HypothesisTestCase):
 
     def test_huffman_tree_hierarchy(self):
         workspace.GlobalInit(['caffe2'])
-        labelSet = range(0, 6)
+        labelSet = list(range(0, 6))
         counts = [1, 2, 3, 4, 5, 6]
         labels = sum([[l] * c for (l, c) in zip(labelSet, counts)], [])
         Y = np.array(labels).astype(np.int64)

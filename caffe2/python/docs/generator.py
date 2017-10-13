@@ -1,3 +1,18 @@
+# Copyright (c) 2016-present, Facebook, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+##############################################################################
+
 ## @package generator
 # Module caffe2.python.docs.generator
 from __future__ import absolute_import
@@ -7,6 +22,7 @@ from __future__ import unicode_literals
 import os
 from caffe2.python import core, workspace
 from caffe2.python.docs.formatter import Markdown
+from future.utils import viewitems, viewvalues
 
 OpSchema = workspace.C.OpSchema
 
@@ -74,22 +90,15 @@ class OpDocGenerator(DocGenerator):
                 priority = 4
                 self.operators[name] = self.getOperatorDoc(name, schema, priority)
 
-        for name, engines in self.engines.items():
+        for name, engines in viewitems(self.engines):
             if name in self.operators:
                 self.operators[name].addEngines(engines)
 
         # Generate a sorted list of operators
-        operators = [v for k, v in self.operators.items()]
-
-        def compare(op1, op2):
-            if op1.priority == op2.priority:
-                if op1.name < op2.name:
-                    return -1
-                else:
-                    return 1
-            return op1.priority - op2.priority
-
-        return sorted(operators, cmp=compare)
+        return sorted(
+            viewvalues(self.operators),
+            key=lambda op: (op.priority, op.name)
+        )
 
     def createBody(self):
         operators = self.getOperators()
@@ -107,8 +116,8 @@ class OperatorEngine(object):
 
     def getDeviceImpl(self):
         deviceImplList = []
-        for device, impl in {'CPU': OpSchema.get_cpu_impl(self.op_name),
-                             'CUDA': OpSchema.get_cuda_impl(self.op_name)}.items():
+        for device, impl in [('CPU', OpSchema.get_cpu_impl(self.op_name)),
+                             ('CUDA', OpSchema.get_cuda_impl(self.op_name))]:
             if not impl:
                 continue
             deviceImplList.append((device, impl))
@@ -135,6 +144,7 @@ class OperatorDoc(object):
     def generateDoc(self, formatter):
         if self.schema.doc:
             formatter.parseAndAdd(self.schema.doc)
+            formatter.addLinebreak()
         else:
             formatter.addLine("No documentation yet.")
 
@@ -150,20 +160,20 @@ class OperatorDoc(object):
             formatter.addTable(table, (table == []))
 
     def generateInterface(self, formatter):
-        def makeDesc(title, desc):
+        def makeDesc(title, args):
             f = formatter.clone()
             f.addEmphasis(title, 1)
             out = [(f.dump(), '')]
-            for name, doc in desc:
+            for arg in args:
                 f = formatter.clone()
-                f.addCode(name, inline=True)
-                out.append((f.dump(), doc or ''))
+                f.addCode(arg.name, inline=True)
+                out.append((f.dump(), arg.description or ''))
             return out
 
         tuples = []
 
-        if self.schema.arg_desc:
-            tuples += makeDesc('Arguments', self.schema.arg_desc)
+        if self.schema.args:
+            tuples += makeDesc('Arguments', self.schema.args)
 
         if self.schema.input_desc:
             tuples += makeDesc('Inputs', self.schema.input_desc)
@@ -175,6 +185,7 @@ class OperatorDoc(object):
 
     def generateCodeLink(self, formatter):
         formatter.addHeader("Code", 3)
+        formatter.addLinebreak()
         formatter.addCodeLink(self.schema.file)
 
     def getInfo(self, formatter, name, impl):

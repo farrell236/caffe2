@@ -1,3 +1,19 @@
+/**
+ * Copyright (c) 2016-present, Facebook, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "caffe2/operators/prelu_op.h"
 
 #include "caffe2/utils/cpu_neon.h"
@@ -201,7 +217,7 @@ bool PReluGradientOp<float, CPUContext>::RunOnDevice() {
       for (int i = 0; i < Y.size(); ++i) {
         if (Xdata[i] <= 0) {
           int c = (i / dim) % C / div_factor;
-          dWdata[c] += Ydata[i] * Xdata[i];
+          dWdata[c] += dYdata[i] * Xdata[i];
         }
       }
 
@@ -231,14 +247,14 @@ bool PReluGradientOp<float, CPUContext>::RunOnDevice() {
             (Xmat > 0)
                 .select(
                     Xmat.cwiseMin(0.0f), // zero gradients on the 'if' path.
-                    Ymat * Xmat)
+                    dYmat * Xmat)
                 .sum();
       } else {
         dXmat = (Xmat > 0).select(dYmat, dYmat.colwise() * Wvec);
         dWvec = (Xmat > 0)
                     .select(
                         Xmat.cwiseMin(0.0f), // zero gradients on the 'if' path.
-                        Ymat * Xmat)
+                        dYmat * Xmat)
                     .rowwise()
                     .sum();
       }
@@ -251,7 +267,6 @@ bool PReluGradientOp<float, CPUContext>::RunOnDevice() {
   return true;
 }
 
-namespace {
 REGISTER_CPU_OPERATOR(PRelu, PReluOp<float, CPUContext>);
 REGISTER_CPU_OPERATOR(PReluGradient, PReluGradientOp<float, CPUContext>);
 
@@ -260,7 +275,7 @@ OPERATOR_SCHEMA(PRelu)
     .NumInputs(2)
     .NumOutputs(1)
     .AllowInplace({{0, 0}})
-    .IdenticalTypeAndShape()
+    .IdenticalTypeAndShapeOfInput(0)
     .SetDoc(R"DOC(
 
 PRelu takes input data (Tensor<T>) and slope tensor as input, and produces one
@@ -296,5 +311,4 @@ class GetPReluGradient : public GradientMakerBase {
 };
 REGISTER_GRADIENT(PRelu, GetPReluGradient);
 
-} // namespace
 } // namespace caffe2

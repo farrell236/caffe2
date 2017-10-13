@@ -1,3 +1,19 @@
+/**
+ * Copyright (c) 2016-present, Facebook, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 // conv_op_impl.h is the templated implementation of the conv_op.h file.
 #ifndef CAFFE2_OPERATORS_CONV_OP_IMPL_H_
 #define CAFFE2_OPERATORS_CONV_OP_IMPL_H_
@@ -7,11 +23,8 @@
 #include "caffe2/core/logging.h"
 #include "caffe2/core/operator.h"
 #include "caffe2/operators/conv_op.h"
-#include "caffe2/operators/conv_op_shared.h"
 #include "caffe2/operators/conv_pool_op_base.h"
 #include "caffe2/utils/math.h"
-
-CAFFE2_DECLARE_bool(caffe2_force_shared_col_buffer);
 
 namespace caffe2 {
 
@@ -199,7 +212,7 @@ bool ConvOp<T, Context>::RunOnDeviceWithOrderNHWC() {
   CAFFE_ENFORCE_EQ(
       kernel_.size(),
       2,
-      "Only 2d convlution is supported for NHWC storage type");
+      "Only 2d convolution is supported for NHWC storage type");
 
   CAFFE_ENFORCE(X.ndim(), filter.ndim());
   const int M = filter.dim32(0);

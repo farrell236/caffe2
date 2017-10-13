@@ -1,3 +1,18 @@
+# Copyright (c) 2016-present, Facebook, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+##############################################################################
+
 ## @package batch_distill_lr_loss
 # Module caffe2.python.layers.batch_distill_lr_loss
 from __future__ import absolute_import
@@ -5,7 +20,7 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 
-from caffe2.python import schema
+from caffe2.python import core, schema
 from caffe2.python.layers.layers import (
     ModelLayer,
 )
@@ -36,18 +51,29 @@ class BatchDistillLRLoss(ModelLayer):
             ),
             input_record
         )
-        self.tags.update({Tags.TRAIN_ONLY})
+        self.tags.update([Tags.EXCLUDE_FROM_PREDICTION])
 
         self.output_schema = schema.Scalar(
             np.float32,
-            model.net.NextScopedBlob(name + '_output'))
+            self.get_next_blob_reference('output')
+        )
 
     def add_ops(self, net):
         label = self.input_record.label()
         if self.input_record.label.field_type() != np.int32:
-            label = net.Cast(label, net.NextScopedBlob('int32_label'), to='int32')
+            label = net.Cast(
+                label,
+                net.NextScopedBlob('int32_label'),
+                to=core.DataType.INT32,
+            )
 
         teacher_label = self.input_record.teacher_label()
+        if self.input_record.teacher_label.field_type() != np.float32:
+            teacher_label = net.Cast(
+                teacher_label,
+                net.NextScopedBlob('float_teacher_label'),
+                to=core.DataType.FLOAT,
+            )
 
         class_probabilities = net.MakeTwoClass(
             self.input_record.prediction(),

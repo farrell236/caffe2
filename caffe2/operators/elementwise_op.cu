@@ -1,3 +1,19 @@
+/**
+ * Copyright (c) 2016-present, Facebook, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #define CUB_STDERR
 #include <cub/block/block_load.cuh>
 #include <cub/block/block_reduce.cuh>
@@ -5,6 +21,7 @@
 #include "caffe2/core/common_gpu.h"
 #include "caffe2/core/context_gpu.h"
 #include "caffe2/operators/elementwise_op.h"
+#include "caffe2/utils/conversions.h"
 
 namespace caffe2 {
 
@@ -62,9 +79,6 @@ REGISTER_CUDA_OPERATOR( \
     name, BinaryElementwiseOp< \
         input_type, CUDAContext, Cuda##name##Functor, output_type>)
 
-#define CUDA_ADD(x, y) ((x) + (y))
-CUDA_FUNCTOR(Add, CUDA_ADD, NumericTypes, SameTypeAsInput);
-#undef CUDA_ADD
 #define CUDA_SUB(x, y) ((x) - (y))
 CUDA_FUNCTOR(Sub, CUDA_SUB, NumericTypes, SameTypeAsInput);
 #undef CUDA_SUB
@@ -148,12 +162,12 @@ reduce_sum_like_post1(const T* g_idata, T* g_odata, int pre, int N) {
     return;
   }
 
-  T sum = (T)0;
+  float sum = 0.0;
   for (int i = 0; i < pre; ++i) {
-    sum += g_idata[i * N + n];
+    sum += convert::To<T, float>(g_idata[i * N + n]);
   }
 
-  g_odata[n] = sum;
+  g_odata[n] = convert::To<float, T>(sum);
 }
 
 template <typename T>
@@ -165,35 +179,75 @@ void device_reduce(
     CUDAContext* context) {
   // Determine temporary device storage requirements
   size_t temp_storage_bytes = 0;
-  cub::DeviceReduce::Sum(NULL, temp_storage_bytes, d_in, d_out, N);
+  cub::DeviceReduce::Sum(
+      NULL, temp_storage_bytes, d_in, d_out, N, context->cuda_stream());
 
   auto buffer_size = temp_storage_bytes / sizeof(T);
   buffer_size += temp_storage_bytes % sizeof(T) != 0 ? 1 : 0;
   buffer->Resize(buffer_size);
   void* d_temp_storage = static_cast<void*>(buffer->template mutable_data<T>());
   // Run sum-reduction
-  cub::DeviceReduce::Sum(d_temp_storage, temp_storage_bytes, d_in, d_out, N);
+  cub::DeviceReduce::Sum(
+      d_temp_storage,
+      temp_storage_bytes,
+      d_in,
+      d_out,
+      N,
+      context->cuda_stream());
+}
+
+template <>
+void device_reduce<float16>(
+    const float16* in,
+    float16* out,
+    int N,
+    Tensor<CUDAContext>* buffer,
+    CUDAContext* context) {
+  auto buffer_size = 1;
+
+  if (buffer->size() != buffer_size) {
+    buffer->Resize(buffer_size);
+
+    math::Set<float16, CUDAContext>(
+        N,
+        convert::To<float,float16>(1.),
+        buffer->mutable_data<float16>(),
+        context);
+  }
+
+  CUBLAS_ENFORCE(cublasDotEx(
+              context->cublas_handle(),
+              N,
+              in,
+              CUDA_R_16F,
+              1,
+              buffer->data<float16>(),
+              CUDA_R_16F,
+              0,
+              out,
+              CUDA_R_16F,
+              CUDA_R_32F));
 }
 
 template <typename T, int BLOCK_THREADS>
 __global__ void
 reduce_sum_like(const T* g_idata, T* g_odata, int pre, int N, int post) {
   int n = blockIdx.x;
-  T sum = (T)0;
+  float sum = 0.0;
   int limit = pre * post;
   for (int i = threadIdx.x; i < limit; i += blockDim.x) {
     int curPre = i / post;
     int curPost = i % post;
 
-    sum += g_idata[curPre * N * post + n * post + curPost];
+    sum += convert::To<T, float>(g_idata[curPre * N * post + n * post + curPost]);
   }
   // uses a shared memory reduction within block
-  typedef cub::BlockReduce<T, BLOCK_THREADS> BlockReduceT;
+  typedef cub::BlockReduce<float, BLOCK_THREADS> BlockReduceT;
   // Shared memory
   __shared__ typename BlockReduceT::TempStorage temp_storage;
-  T aggregate = BlockReduceT(temp_storage).Sum(sum);
+  float aggregate = BlockReduceT(temp_storage).Sum(sum);
   if (threadIdx.x == 0) {
-    g_odata[n] = aggregate;
+    g_odata[n] = convert::To<float, T>(aggregate);
   }
 }
 } // namespace
@@ -262,6 +316,170 @@ bool SumReduceLikeOp<CUDAContext>::DoRunWithType() {
   return true;
 }
 
+template <>
+bool SumReduceLikeOp<CUDAContext>::RunOnDevice() {
+  return DispatchHelper<TensorTypes<float, float16>>::call(this, Input(0));
+}
+
 REGISTER_CUDA_OPERATOR(SumReduceLike, SumReduceLikeOp<CUDAContext>);
+
+namespace {
+
+template <bool is_scaler, typename T, typename M>
+__global__ void binary_add_kernel(const int N, const T* a, const T* b, T* r) {
+  CUDA_1D_KERNEL_LOOP(idx, N) {
+    r[idx] = convert::To<M, T>(
+        convert::To<T, M>(a[idx]) +
+        convert::To<T, M>(is_scaler ? b[0] : b[idx]));
+  }
+}
+
+template <bool no_post, typename T, typename M>
+__global__ void binary_add_kernel_broadcast(
+    const T* a,
+    const T* b,
+    T* r,
+    const int pre,
+    const int post,
+    const int n) {
+  CUDA_1D_KERNEL_LOOP(idx, no_post ? pre * n : pre * post * n) {
+    r[idx] = convert::To<M, T>(
+        convert::To<T, M>(a[idx]) +
+        convert::To<T, M>(no_post ? b[idx % n] : b[(idx / post) % n]));
+  }
+}
+} // namespace
+
+// Actual Add operator, because the above macros are read-only.
+class CUDAAddOp final : public Operator<CUDAContext> {
+ public:
+  CUDAAddOp(const OperatorDef& operator_def, Workspace* ws)
+      : Operator<CUDAContext>(operator_def, ws),
+        OP_SINGLE_ARG(bool, "broadcast", enable_broadcast_, 0),
+        OP_SINGLE_ARG(int, "axis", axis_, -1),
+        OP_SINGLE_ARG(string, "axis_str", axis_str_, ""),
+        OP_SINGLE_ARG(string, "order", order_, "NCHW") {
+    // Figure out the correct axis to use.
+    if (enable_broadcast_) {
+      if (axis_ != -1) {
+        // Get axis from an explicit axis argument.
+        CAFFE_ENFORCE_EQ(
+            axis_str_.size(),
+            0,
+            "Args axis and axis_str cannot be used simultaneously.");
+      } else if (axis_str_.size()) {
+        // Get the axis index semantically.
+        CAFFE_ENFORCE_EQ(
+            axis_str_.size(), 1, "Unsupported axis string", axis_str_);
+        size_t semantic_axis_ = order_.find(axis_str_);
+        CAFFE_ENFORCE_NE(
+            semantic_axis_,
+            string::npos,
+            "Unrecognizable axis string ",
+            axis_str_,
+            " from order string ",
+            order_);
+        axis_ = semantic_axis_;
+      }
+    } else {
+      CAFFE_ENFORCE(
+          axis_ == -1 && axis_str_.size() == 0,
+          "Do not specify axis or axis_str if broadcast is not enabled.");
+    }
+  }
+
+  ~CUDAAddOp() {}
+
+  template <typename T, typename M>
+  bool DoRunWithType() {
+    auto& X0 = Input(0);
+    auto& X1 = Input(1);
+    auto* output = Output(0);
+
+    output->ResizeLike(X0);
+
+    const T* X0data = X0.template data<T>();
+    const T* X1data = X1.template data<T>();
+    T* outputData = output->template mutable_data<T>();
+
+    if (!enable_broadcast_) {
+      CAFFE_ENFORCE_EQ(
+          X0.dims(),
+          X1.dims(),
+          "Dimension mismatch - did you forget to set broadcast=1?");
+      binary_add_kernel<false, T, M><<<
+          CAFFE_GET_BLOCKS(X0.size()),
+          CAFFE_CUDA_NUM_THREADS,
+          0,
+          context_.cuda_stream()>>>(X0.size(), X0data, X1data, outputData);
+    } else if (X1.size() == 1) {
+      binary_add_kernel<true, T, M><<<
+          CAFFE_GET_BLOCKS(X0.size()),
+          CAFFE_CUDA_NUM_THREADS,
+          0,
+          context_.cuda_stream()>>>(X0.size(), X0data, X1data, outputData);
+    } else {
+      CAFFE_ENFORCE_GT(
+          X0.ndim(),
+          X1.ndim(),
+          "If you are doing broadcasting, input1 should have "
+          "a smaller number of dimensions.");
+      const int axis = (axis_ == -1 ? X0.ndim() - X1.ndim() : axis_);
+      CAFFE_ENFORCE(
+          axis >= 0 && axis < X0.ndim(),
+          "Broadcast axis should be in the range of the number "
+          "of dimensions of the first input.");
+      size_t pre = 1, n = 1, post = 1;
+      for (int i = 0; i < axis; ++i) {
+        pre *= X0.dim(i);
+      }
+      for (int i = 0; i < X1.ndim(); ++i) {
+        CAFFE_ENFORCE_EQ(
+            X0.dim(i + axis), X1.dim(i), "Broadcast dimension mismatch.");
+        n *= X1.dim(i);
+      }
+      for (int i = axis + X1.ndim(); i < X0.ndim(); ++i) {
+        post *= X0.dim(i);
+      }
+
+      if (post == 1) {
+        binary_add_kernel_broadcast<true, T, M><<<
+            CAFFE_GET_BLOCKS(pre * n),
+            CAFFE_CUDA_NUM_THREADS,
+            0,
+            context_.cuda_stream()>>>(X0data, X1data, outputData, pre, post, n);
+      } else {
+        binary_add_kernel_broadcast<false, T, M><<<
+            CAFFE_GET_BLOCKS(pre * post * n),
+            CAFFE_CUDA_NUM_THREADS,
+            0,
+            context_.cuda_stream()>>>(X0data, X1data, outputData, pre, post, n);
+      }
+    }
+    return true;
+  }
+
+  bool RunOnDevice() override {
+    if (Input(0).IsType<float>()) {
+      return DoRunWithType<float, float>();
+    } else if (Input(0).IsType<float16>()) {
+      return DoRunWithType<float16, float>();
+    } else if (Input(0).IsType<int32_t>()) {
+      return DoRunWithType<int32_t, int32_t>();
+    } else if (Input(0).IsType<int64_t>()) {
+      return DoRunWithType<int64_t, int64_t>();
+    } else {
+      return false;
+    }
+  }
+
+ private:
+  bool enable_broadcast_;
+  int axis_;
+  string axis_str_;
+  string order_;
+};
+
+REGISTER_CUDA_OPERATOR(Add, CUDAAddOp);
 
 }  // namespace caffe2

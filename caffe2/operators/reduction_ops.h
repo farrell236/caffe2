@@ -1,3 +1,19 @@
+/**
+ * Copyright (c) 2016-present, Facebook, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #ifndef CAFFE2_OPERATORS_REDUCTION_OPS_H_
 #define CAFFE2_OPERATORS_REDUCTION_OPS_H_
 
@@ -21,12 +37,20 @@ class SumElementsOp : public Operator<Context> {
       : Operator<Context>(operator_def, ws), average_(average) {}
   ~SumElementsOp() {}
 
-  bool RunOnDevice() override {
+  bool RunOnDevice() override
+// TODO: T21635002 fix float-divide-by-zero undefined behavior
+#if defined(__has_feature)
+#if __has_feature(__address_sanitizer__)
+      __attribute__((__no_sanitize__("float-divide-by-zero")))
+#endif
+#endif
+  {
     auto& X = Input(0);
     auto* sum = Output(0);
     sum->Resize(vector<TIndex>());
     T* data = sum->template mutable_data<T>();
-    math::Sum<T, Context>(X.size(), X.template data<T>(), data, &context_);
+    math::Sum<T, Context>(
+      X.size(), X.template data<T>(), data, &context_, &scratch_);
     if (average_) {
       math::Scale<T, Context>(
           1,
@@ -40,6 +64,7 @@ class SumElementsOp : public Operator<Context> {
 
  private:
   bool average_;
+  Tensor<Context> scratch_;
 };
 
 template <typename T, class Context>
@@ -63,13 +88,18 @@ class SumElementsGradientOp : public Operator<Context> {
   bool average_;
 };
 
-template <typename T, class Context>
+template <class Context>
 class SumSqrElementsOp : public Operator<Context> {
  public:
   USE_SIMPLE_CTOR_DTOR(SumSqrElementsOp)
   USE_OPERATOR_CONTEXT_FUNCTIONS;
 
   bool RunOnDevice() override {
+    return DispatchHelper<TensorTypes<float>>::call(this, Input(0));
+  }
+
+  template <typename T>
+  bool DoRunWithType() {
     bool average = OperatorBase::GetSingleArgument<bool>("average", false);
     auto& X = Input(0);
     auto* sum = Output(0);
@@ -78,17 +108,69 @@ class SumSqrElementsOp : public Operator<Context> {
         X.size(),
         X.template data<T>(),
         sum->template mutable_data<T>(),
-        &context_);
+        &context_,
+        &scratch_);
     if (average) {
       math::Scale<T, Context>(
           1,
-          static_cast<T>(1.) / X.size(),
+          float(1.) / X.size(),
           sum->template data<T>(),
           sum->template mutable_data<T>(),
           &context_);
     }
     return true;
   }
+
+ private:
+  Tensor<Context> scratch_;
+};
+
+template <typename T, class Context, bool ROWWISE>
+class MaxReductionOp : public Operator<Context> {
+ public:
+  USE_SIMPLE_CTOR_DTOR(MaxReductionOp)
+  USE_OPERATOR_CONTEXT_FUNCTIONS;
+
+  bool RunOnDevice() override {
+    auto& X = Input(0);
+    CAFFE_ENFORCE_EQ(X.ndim(), 3);
+
+    const int batch_size = X.dim32(0);
+    const int M = X.dim32(1);
+    const int N = X.dim32(2);
+
+    auto* Y = Output(0);
+    ROWWISE ? Y->Resize(batch_size, M) : Y->Resize(batch_size, N);
+
+    if (ROWWISE) {
+      math::RowwiseMax<T, Context>(
+          batch_size * M,
+          N,
+          X.template data<T>(),
+          Y->template mutable_data<T>(),
+          &context_);
+    } else {
+      const int input_size = N * M;
+      for (int i = 0; i < batch_size; ++i) {
+        math::ColwiseMax<T, Context>(
+            M,
+            N,
+            X.template data<T>() + i * input_size,
+            Y->template mutable_data<T>() + i * N,
+            &context_);
+      }
+    }
+    return true;
+  }
+};
+
+template <typename T, class Context, bool ROWWISE>
+class MaxReductionGradientOp : public Operator<Context> {
+ public:
+  USE_SIMPLE_CTOR_DTOR(MaxReductionGradientOp)
+  USE_OPERATOR_CONTEXT_FUNCTIONS;
+
+  bool RunOnDevice() override;
 };
 
 } // namespace caffe2

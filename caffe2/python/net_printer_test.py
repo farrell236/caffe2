@@ -1,3 +1,18 @@
+# Copyright (c) 2016-present, Facebook, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+##############################################################################
+
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -6,7 +21,7 @@ from __future__ import unicode_literals
 from caffe2.python import net_printer
 from caffe2.python.checkpoint import Job
 from caffe2.python.net_builder import ops
-from caffe2.python.task import Task, final_output
+from caffe2.python.task import Task, final_output, WorkspaceType
 import unittest
 
 
@@ -47,8 +62,16 @@ def example_task():
         o6 = final_output(six)
         o7_1 = final_output(seven_1)
         o7_2 = final_output(seven_2)
-        return o6, o7_1, o7_2
 
+    with Task(num_instances=2):
+        with ops.task_init():
+            one = ops.Const(1)
+        with ops.task_instance_init():
+            local = ops.Const(2)
+        ops.Add([one, local], [one])
+        ops.LogInfo('ble')
+
+    return o6, o7_1, o7_2
 
 def example_job():
     with Job() as job:
@@ -68,22 +91,24 @@ class TestNetPrinter(unittest.TestCase):
             with Task():
                 # distributed_ctx_init_* ignored by analyzer
                 ops.Add(['distributed_ctx_init_a', 'distributed_ctx_init_b'])
-        net_printer.analyze(example_job())
+        # net_printer.analyze(example_job())
+        print(net_printer.to_string(example_job()))
 
     def test_undefined_blob(self):
         job = example_job()
         with job:
             with Task():
                 ops.Add(['a', 'b'])
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(AssertionError) as e:
             net_printer.analyze(job)
+        self.assertEqual("Blob undefined: a", str(e.exception))
 
     def test_multiple_definition(self):
         job = example_job()
         with job:
-            with Task():
+            with Task(workspace_type=WorkspaceType.GLOBAL):
                 ops.Add([ops.Const(0), ops.Const(1)], 'out1')
-            with Task():
+            with Task(workspace_type=WorkspaceType.GLOBAL):
                 ops.Add([ops.Const(2), ops.Const(3)], 'out1')
         with self.assertRaises(AssertionError):
             net_printer.analyze(job)

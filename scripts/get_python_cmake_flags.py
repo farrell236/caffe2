@@ -20,12 +20,6 @@ import os
 import sys
 import platform
 
-version = platform.python_version()
-if version[:3] != '2.7':
-    print('ERROR: Python {version} is not officially supported yet.'
-          .format(version=version), file=sys.stderr)
-    exit(1)
-
 # Flags to print to stdout
 flags = ''
 inc = sysconfig.get_python_inc()
@@ -35,7 +29,9 @@ lib = sysconfig.get_config_var("LIBDIR")
 if sys.platform == "darwin":
     lib = os.path.dirname(lib) + '/Python'
     if os.path.isfile(lib):
-        flags += '-DPYTHON_LIBRARY={lib}'.format(lib=lib)
+        flags += '-DPYTHON_LIBRARY={lib} '.format(lib=lib)
 
 if os.path.isfile(inc + '/Python.h'):
-    flags += '-DPYTHON_INCLUDE_DIR={inc}'.format(inc=inc)
+    flags += '-DPYTHON_INCLUDE_DIR={inc} '.format(inc=inc)
+
+print(flags, end='')

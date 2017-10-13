@@ -1,3 +1,18 @@
+# Copyright (c) 2016-present, Facebook, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+##############################################################################
+
 ## @package batch_mse_loss
 # Module caffe2.python.layers.batch_mse_loss
 from __future__ import absolute_import
@@ -27,11 +42,11 @@ class BatchMSELoss(ModelLayer):
             ),
             input_record
         )
-        self.tags.update({Tags.TRAIN_ONLY})
+        self.tags.update([Tags.EXCLUDE_FROM_PREDICTION])
 
         self.output_schema = schema.Scalar(
             np.float32,
-            model.net.NextScopedBlob(name + '_output'))
+            self.get_next_blob_reference('output'))
 
     def add_ops(self, net):
         prediction = net.Squeeze(
@@ -40,8 +55,20 @@ class BatchMSELoss(ModelLayer):
             dims=[1]
         )
 
+        label = self.input_record.label.field_blobs()
+        if self.input_record.label.field_type().base != (
+                self.input_record.prediction.field_type().base):
+
+            label = net.Cast(
+                label,
+                net.NextScopedBlob('cast_label'),
+                to=schema.data_type_for_dtype(
+                    self.input_record.prediction.field_type()
+                )
+            )
+
         label = net.StopGradient(
-            self.input_record.label(),
+            label,
             net.NextScopedBlob('stopped_label')
         )
 

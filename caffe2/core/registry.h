@@ -1,4 +1,20 @@
 /**
+ * Copyright (c) 2016-present, Facebook, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/**
  * Simple registry implementation in Caffe2 that uses static variables to
  * register object creators during program initialization time.
  */
@@ -6,9 +22,9 @@
 #define CAFFE2_CORE_REGISTRY_H_
 
 #include <algorithm>
+#include <cstdio>
 #include <cstdlib>
 #include <functional>
-#include <iostream>
 #include <memory>
 #include <mutex>
 
@@ -16,6 +32,16 @@
 #include "caffe2/core/typeid.h"
 
 namespace caffe2 {
+
+template <typename KeyType>
+inline void PrintOffendingKey(const KeyType& key) {
+  printf("[key type printing not supported]\n");
+}
+
+template <>
+inline void PrintOffendingKey(const string& key) {
+  printf("Offending key: %s.\n", key.c_str());
+}
 
 /**
  * @brief A template class that allows one to register classes by keys.
@@ -43,7 +69,8 @@ class Registry {
     // explicit dependency on glog's initialization function.
     std::lock_guard<std::mutex> lock(register_mutex_);
     if (registry_.count(key) != 0) {
-      std::cerr << "Key " << key << " already registered." << std::endl;
+      printf("Key already registered.\n");
+      PrintOffendingKey(key);
       std::exit(1);
     }
     registry_[key] = creator;

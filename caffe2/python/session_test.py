@@ -1,3 +1,18 @@
+# Copyright (c) 2016-present, Facebook, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+##############################################################################
+
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -33,14 +48,14 @@ class TestLocalSession(TestCase):
             with core.NameScope('proc1'):
                 out = NewRecord(net, rec)
             net.Add([rec.uid(), rec.uid()], [out.uid()])
-            out.value.set(blob=rec.value())
+            out.value.set(blob=rec.value(), unsafe=True)
             return [net], out
 
         def proc2(rec):
             net = core.Net('proc2')
             with core.NameScope('proc2'):
                 out = NewRecord(net, rec)
-            out.uid.set(blob=rec.uid())
+            out.uid.set(blob=rec.uid(), unsafe=True)
             net.Sub([rec.value(), rec.value()], [out.value()])
             return [net], out
 

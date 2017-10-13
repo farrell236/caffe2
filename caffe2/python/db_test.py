@@ -1,3 +1,18 @@
+# Copyright (c) 2016-present, Facebook, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+##############################################################################
+
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -14,8 +29,13 @@ class TestDB(unittest.TestCase):
     def setUp(self):
         handle, self.file_name = tempfile.mkstemp()
         os.close(handle)
-        self.data = [("key{}".format(i), "value{}".format(i))
-                     for i in range(1, 10)]
+        self.data = [
+            (
+                "key{}".format(i).encode("ascii"),
+                "value{}".format(i).encode("ascii")
+            )
+            for i in range(1, 10)
+        ]
 
     def testSimple(self):
         db = workspace.C.create_db(
@@ -34,7 +54,7 @@ class TestDB(unittest.TestCase):
         data = []
         while cursor.valid():
             data.append((cursor.key(), cursor.value()))
-            cursor.next()
+            cursor.next()  # noqa: B305
         del cursor
 
         db.close()  # test explicit db closer

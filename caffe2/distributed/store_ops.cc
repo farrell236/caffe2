@@ -1,3 +1,19 @@
+/**
+ * Copyright (c) 2016-present, Facebook, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "store_ops.h"
 
 namespace caffe2 {
@@ -7,20 +23,15 @@ constexpr auto kAddValue = "add_value";
 
 StoreSetOp::StoreSetOp(const OperatorDef& operator_def, Workspace* ws)
     : Operator<CPUContext>(operator_def, ws),
-      blobName_(GetSingleArgument<std::string>(kBlobName, "")) {}
+      blobName_(
+          GetSingleArgument<std::string>(kBlobName, operator_def.input(DATA))) {
+}
 
 bool StoreSetOp::RunOnDevice() {
-  // Use argument as name, if specified.
-  // Otherwise, use input blob name.
-  auto& name = blobName_;
-  if (name.empty()) {
-    name = def().input(DATA);
-  }
-
   // Serialize and pass to store
   auto* handler =
       OperatorBase::Input<std::unique_ptr<StoreHandler>>(HANDLER).get();
-  handler->set(name, InputBlob(DATA).Serialize(name));
+  handler->set(blobName_, InputBlob(DATA).Serialize(blobName_));
   return true;
 }
 
@@ -39,20 +50,15 @@ is the data in that blob. The key can be overridden by specifying the
 
 StoreGetOp::StoreGetOp(const OperatorDef& operator_def, Workspace* ws)
     : Operator<CPUContext>(operator_def, ws),
-      blobName_(GetSingleArgument<std::string>(kBlobName, "")) {}
+      blobName_(GetSingleArgument<std::string>(
+          kBlobName,
+          operator_def.output(DATA))) {}
 
 bool StoreGetOp::RunOnDevice() {
-  // Use argument as name, if specified.
-  // Otherwise, use output blob name.
-  auto& name = blobName_;
-  if (name.empty()) {
-    name = def().output(DATA);
-  }
-
   // Get from store and deserialize
   auto* handler =
       OperatorBase::Input<std::unique_ptr<StoreHandler>>(HANDLER).get();
-  OperatorBase::Outputs()[DATA]->Deserialize(handler->get(name));
+  OperatorBase::Outputs()[DATA]->Deserialize(handler->get(blobName_));
   return true;
 }
 

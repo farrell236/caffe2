@@ -1,3 +1,18 @@
+# Copyright (c) 2016-present, Facebook, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+##############################################################################
+
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -272,6 +287,41 @@ class TestLoadSave(TestLoadSaveBase):
             )
             self.assertEqual(len(workspace.Blobs()), 3)
             for i, name in enumerate(new_names):
+                self.assertTrue(workspace.HasBlob(name))
+                self.assertTrue((workspace.FetchBlob(name) == blobs[i]).all())
+            # moved here per @cxj's suggestion
+            load_new_names = ['blob_x', 'blob_y', 'blob_z']
+            # load 'x' into 'blob_x'
+            self.assertTrue(
+                workspace.RunOperatorOnce(
+                    core.CreateOperator(
+                        "Load", [], load_new_names[0:1],
+                        absolute_path=1,
+                        db=os.path.join(tmp_folder, "db"),
+                        db_type=self._db_type,
+                        source_blob_names=new_names[0:1]
+                    )
+                )
+            )
+            # we should have 'blob_a/b/c/' and 'blob_x' now
+            self.assertEqual(len(workspace.Blobs()), 4)
+            for i, name in enumerate(load_new_names[0:1]):
+                self.assertTrue(workspace.HasBlob(name))
+                self.assertTrue((workspace.FetchBlob(name) == blobs[i]).all())
+            self.assertTrue(
+                workspace.RunOperatorOnce(
+                    core.CreateOperator(
+                        "Load", [], load_new_names[0:3],
+                        absolute_path=1,
+                        db=os.path.join(tmp_folder, "db"),
+                        db_type=self._db_type,
+                        source_blob_names=new_names[0:3]
+                    )
+                )
+            )
+            # we should have 'blob_a/b/c/' and 'blob_x/y/z' now
+            self.assertEqual(len(workspace.Blobs()), 6)
+            for i, name in enumerate(load_new_names[0:3]):
                 self.assertTrue(workspace.HasBlob(name))
                 self.assertTrue((workspace.FetchBlob(name) == blobs[i]).all())
         finally:

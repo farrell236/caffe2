@@ -1,3 +1,19 @@
+/**
+ * Copyright (c) 2016-present, Facebook, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #ifndef CAFFE2_CORE_COMMON_CUDNN_H_
 #define CAFFE2_CORE_COMMON_CUDNN_H_
 
@@ -94,7 +110,7 @@ inline void CheckCuDNNVersions() {
   // Major, minor and patch versions must all match
   bool version_match = cudnnCompiledVersion() == cudnnRuntimeVersion();
   CAFFE_ENFORCE(version_match,
-                "cuDNN compiled (", cudnnCompiledVersion(), ") and"
+                "cuDNN compiled (", cudnnCompiledVersion(), ") and "
                 "runtime (", cudnnRuntimeVersion(), ") versions mismatch");
 }
 
@@ -319,31 +335,26 @@ class CuDNNHandles {
  * not need more than one cudnn workspace per device.
  */
 struct CuDNNWorkspace {
-  ~CuDNNWorkspace() noexcept {
-    if (data_) {
-      CUDAContext::Delete(data_);
-    }
-  }
+  ~CuDNNWorkspace() noexcept {}
 
   void* get(size_t nbytes) {
     if (nbytes_ < nbytes) {
       reset();
-      data_ = CUDAContext::New(nbytes);
+      auto data_and_deleter = CUDAContext::New(nbytes);
+      data_ = {data_and_deleter.first, data_and_deleter.second};
       nbytes_ = nbytes;
     }
     CAFFE_ENFORCE_GE(nbytes_, nbytes);
-    return data_;
+    return data_.get();
   }
 
   void reset() {
-    if (data_) {
-      CUDAContext::Delete(data_);
-    }
     data_ = nullptr;
     nbytes_ = 0;
   }
 
-  void* data_{nullptr};
+ private:
+  std::unique_ptr<void, MemoryDeleter> data_{nullptr, NoDelete};
   size_t nbytes_{0};
 };
 
@@ -421,13 +432,11 @@ class CuDNNWrapper {
   cudnnHandle_t& inline_cudnn_handle() {
     int gpu_id = context_->cuda_gpu_id();
     auto& cudnn_handle_ = tls_cudnn_handles_.cudnn_handle_[gpu_id];
-    if (cudnn_handle_) {
-      return cudnn_handle_;
-    } else {
+    if (!cudnn_handle_) {
       context_->SwitchToDevice();
       CUDNN_ENFORCE(cudnnCreate(&cudnn_handle_));
-      CUDNN_ENFORCE(cudnnSetStream(cudnn_handle_, context_->cuda_stream()));
     }
+    CUDNN_ENFORCE(cudnnSetStream(cudnn_handle_, context_->cuda_stream()));
     return cudnn_handle_;
   }
 

@@ -1,3 +1,19 @@
+/**
+ * Copyright (c) 2016-present, Facebook, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include <mutex>
 #include "caffe2/core/context.h"
 #include "caffe2/core/operator.h"
@@ -113,7 +129,7 @@ argument. Returns the updated integer and the value prior to the update.
 OPERATOR_SCHEMA(CreateAtomicBool)
     .NumInputs(0)
     .NumOutputs(1)
-    .SetDoc("Create an unique_ptr blob to hold a atomic<bool>")
+    .SetDoc("Create an unique_ptr blob to hold an atomic<bool>")
     .Output(0, "atomic_bool", "Blob containing a unique_ptr<atomic<bool>>");
 
 OPERATOR_SCHEMA(ConditionalSetAtomicBool)
@@ -128,7 +144,7 @@ OPERATOR_SCHEMA(ConditionalSetAtomicBool)
 OPERATOR_SCHEMA(CheckAtomicBool)
     .NumInputs(1)
     .NumOutputs(1)
-    .SetDoc("Copy the value of a atomic<bool> to a bool")
+    .SetDoc("Copy the value of an atomic<bool> to a bool")
     .Input(0, "atomic_bool", "Blob containing a unique_ptr<atomic<bool>>")
     .Output(0, "value", "Copy of the value for the atomic<bool>");
 

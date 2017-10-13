@@ -1,3 +1,19 @@
+/**
+ * Copyright (c) 2016-present, Facebook, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include <assert.h>
 #include <cub/block/block_reduce.cuh>
 
@@ -31,11 +47,17 @@ bool LabelCrossEntropyOp<float, CUDAContext>::RunOnDevice() {
   auto& X = Input(0);
   auto& label = Input(1);
   auto* Y = Output(0);
-  DCHECK_EQ(X.ndim(), 2);
-  int N = X.dim32(0);
-  int D = X.dim32(1);
-  DCHECK((label.ndim() == 1) || (label.ndim() == 2 && label.dim32(1) == 1));
-  DCHECK_EQ(label.dim32(0), N);
+  int N, D;
+  if (X.ndim() > 1) {
+    N = X.dim32(0);
+    D = X.size_from_dim(1);
+  } else {
+    N = 1;
+    D = X.dim32(0);
+  }
+  CAFFE_ENFORCE(
+      (label.ndim() == 1) || (label.ndim() == 2 && label.dim32(1) == 1));
+  CAFFE_ENFORCE_EQ(label.dim32(0), N);
   Y->Resize(vector<TIndex>(size_t(1), N));
   LabelCrossEntropyKernel<<<CAFFE_GET_BLOCKS(N), CAFFE_CUDA_NUM_THREADS,
                             0, context_.cuda_stream()>>>(
@@ -50,13 +72,19 @@ bool LabelCrossEntropyGradientOp<float, CUDAContext>::RunOnDevice() {
   auto& label = Input(1);
   auto& dY = Input(2);
   auto* dX = Output(0);
-  DCHECK_EQ(X.ndim(), 2);
-  int N = X.dim32(0);
-  int D = X.dim32(1);
-  DCHECK((label.ndim() == 1) || (label.ndim() == 2 && label.dim32(1) == 1));
-  DCHECK_EQ(label.dim32(0), N);
-  DCHECK_EQ(dY.ndim(), 1);
-  DCHECK_EQ(dY.dim32(0), N);
+  int N, D;
+  if (X.ndim() > 1) {
+    N = X.dim32(0);
+    D = X.size_from_dim(1);
+  } else {
+    N = 1;
+    D = X.dim32(0);
+  }
+  CAFFE_ENFORCE(
+      (label.ndim() == 1) || (label.ndim() == 2 && label.dim32(1) == 1));
+  CAFFE_ENFORCE_EQ(label.dim32(0), N);
+  CAFFE_ENFORCE_EQ(dY.ndim(), 1);
+  CAFFE_ENFORCE_EQ(dY.dim32(0), N);
   dX->ResizeLike(X);
   math::Set<float, CUDAContext>(
       dX->size(), 0.f, dX->mutable_data<float>(), &context_);
@@ -220,7 +248,6 @@ bool SigmoidCrossEntropyWithLogitsGradientOp<float, CUDAContext>::
   return true;
 }
 
-namespace {
 REGISTER_CUDA_OPERATOR(LabelCrossEntropy,
                        LabelCrossEntropyOp<float, CUDAContext>);
 REGISTER_CUDA_OPERATOR(LabelCrossEntropyGradient,
@@ -244,5 +271,4 @@ REGISTER_CUDA_OPERATOR(CrossEntropy,
 REGISTER_CUDA_OPERATOR(CrossEntropyGradient,
                        GPUFallbackOp<CrossEntropyGradientOp<float, CPUContext>>);
 
-}  // namespace
 }  // namespace caffe2

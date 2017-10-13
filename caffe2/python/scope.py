@@ -1,3 +1,18 @@
+# Copyright (c) 2016-present, Facebook, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+##############################################################################
+
 ## @package scope
 # Module caffe2.python.scope
 from __future__ import absolute_import
@@ -7,15 +22,10 @@ from __future__ import unicode_literals
 
 import contextlib
 import threading
+from past.builtins import basestring
 
 from caffe2.proto import caffe2_pb2
 
-# Python 2 and 3 compatibility: test if basestring exists
-try:
-    basestring  # NOQA
-except NameError:
-    # This is python3 so we define basestring.
-    basestring = str
 
 # The name scope and device scope when creating a new operator.
 _NAMESCOPE_SEPARATOR = '/'
@@ -48,20 +58,38 @@ def NameScope(prefix, reset=False):
         _threadlocal_scope.namescope = prefix
     else:
         _threadlocal_scope.namescope = _threadlocal_scope.namescope + prefix
-    yield
-    assert _threadlocal_scope.namescope.endswith(prefix), \
-        "The namescope variable is changed from outside NameScope() calls."
-    _threadlocal_scope.namescope = old_scope
+
+    try:
+        yield
+    finally:
+        assert _threadlocal_scope.namescope.endswith(prefix), \
+            "The namescope variable is changed from outside NameScope() calls."
+        _threadlocal_scope.namescope = old_scope
 
 
 @contextlib.contextmanager
-def DeviceScope(scope):
-    assert isinstance(scope, caffe2_pb2.DeviceOption), \
-        "DeviceScope takes in a caffe2_pb2.DeviceOption as its argument."
+def DeviceScope(scope, node_name=None):
+    new_scope = caffe2_pb2.DeviceOption()
+    if scope:
+        assert isinstance(scope, caffe2_pb2.DeviceOption), \
+            "DeviceScope takes in a caffe2_pb2.DeviceOption as its argument."
+        new_scope.CopyFrom(scope)
+    else:
+        assert node_name, "At least one argument should be non-null in DeviceScope"
+
+    # rewrite node_name if it is explicitly given
+    if node_name:
+        new_scope.node_name = node_name
     global _threadlocal_scope
     old_scope = CurrentDeviceScope()
-    _threadlocal_scope.devicescope = scope
-    yield
-    assert _threadlocal_scope.devicescope == scope, \
-        "The device scope is changed from outside DeviceScope() calls."
-    _threadlocal_scope.devicescope = old_scope
+    # nested scope should inherit the node_name if it is not explicitly set
+    if old_scope and old_scope.HasField('node_name') and \
+            not new_scope.HasField('node_name'):
+        new_scope.node_name = old_scope.node_name
+    _threadlocal_scope.devicescope = new_scope
+    try:
+        yield
+    finally:
+        assert _threadlocal_scope.devicescope == new_scope, \
+            "The device scope is changed from outside DeviceScope() calls."
+        _threadlocal_scope.devicescope = old_scope

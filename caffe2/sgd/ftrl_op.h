@@ -1,3 +1,19 @@
+/**
+ * Copyright (c) 2016-present, Facebook, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #pragma once
 
 #include "caffe2/core/operator.h"
@@ -23,12 +39,16 @@ class FtrlOp final : public Operator<Context> {
  public:
   USE_OPERATOR_CONTEXT_FUNCTIONS;
   FtrlOp(const OperatorDef& operator_def, Workspace* ws)
-      : Operator<Context>(operator_def, ws), params_(this) {}
+      : Operator<Context>(operator_def, ws), params_(this) {
+    CAFFE_ENFORCE(
+        !HasArgument("alpha") || ALPHA >= InputSize(),
+        "Cannot specify alpha by both input and argument");
+  }
   bool RunOnDevice() override;
 
  protected:
   FtrlParams<T> params_;
-  INPUT_TAGS(VAR, N_Z, GRAD);
+  INPUT_TAGS(VAR, N_Z, GRAD, ALPHA);
   OUTPUT_TAGS(OUTPUT_VAR, OUTPUT_N_Z);
 };
 
@@ -36,9 +56,18 @@ template <typename T>
 class SparseFtrlOp final : public Operator<CPUContext> {
  public:
   SparseFtrlOp(const OperatorDef& operator_def, Workspace* ws)
-      : Operator<CPUContext>(operator_def, ws), params_(this) {}
+      : Operator<CPUContext>(operator_def, ws), params_(this) {
+    CAFFE_ENFORCE(
+        !HasArgument("alpha") || ALPHA >= InputSize(),
+        "Cannot specify alpha by both input and argument");
+  }
 
   bool RunOnDevice() override {
+    // run time learning rate override
+    if (ALPHA < InputSize()) {
+      CAFFE_ENFORCE_EQ(Input(ALPHA).size(), 1, "alpha should be real-valued");
+      params_.alphaInv = 1.0 / *(Input(ALPHA).template data<T>());
+    }
     // Use run-time polymorphism
     auto& indices = Input(INDICES);
     if (indices.template IsType<int32_t>()) {
@@ -54,7 +83,7 @@ class SparseFtrlOp final : public Operator<CPUContext> {
 
  protected:
   FtrlParams<T> params_;
-  INPUT_TAGS(VAR, N_Z, INDICES, GRAD);
+  INPUT_TAGS(VAR, N_Z, INDICES, GRAD, ALPHA);
   OUTPUT_TAGS(OUTPUT_VAR, OUTPUT_N_Z);
 
  private:

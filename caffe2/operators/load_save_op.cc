@@ -1,3 +1,19 @@
+/**
+ * Copyright (c) 2016-present, Facebook, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "caffe2/operators/load_save_op.h"
 
 namespace caffe2 {
@@ -9,7 +25,6 @@ void LoadOp<CPUContext>::SetCurrentDevice(BlobProto* proto) {
   }
 }
 
-namespace {
 REGISTER_CPU_OPERATOR(DBExists, DBExistsOp<CPUContext>);
 REGISTER_CPU_OPERATOR(Load, LoadOp<CPUContext>);
 REGISTER_CPU_OPERATOR(Save, SaveOp<CPUContext>);
@@ -48,9 +63,14 @@ DBReader to load from, and we ignore the db and db_type arguments.
         "(int, default 0) if set, use the db path directly and do not prepend "
         "the current root folder of the workspace.")
     .Arg(
+        "add_prefix",
+        "(string, default=\"\") blobs will be prefixed with this when loading."
+        "Useful for avoiding collisions with blobs existing in the workspace."
+        "The output blob names specified to this op should include this prefix.")
+    .Arg(
         "strip_prefix",
         "(string, default=\"\") characters in the provided blob "
-        " names that match strip_prefix will be removed prior to saving."
+        " names that match strip_prefix will be removed prior to loading."
         " Also, characters that precede strip_prefix will be removed. Useful "
         " for removing device scope from blob names.")
     .Arg("db", "(string) the path to the db to load.")
@@ -67,7 +87,12 @@ DBReader to load from, and we ignore the db and db_type arguments.
     .Arg(
         "allow_incomplete",
         "(bool, default false) if true, will allow not loading all the output "
-        "blobs specified in the outputs");
+        "blobs specified in the outputs")
+    .Arg(
+        "source_blob_names",
+        "(list of strings) if set, used instead of output "
+        "blob names, to specify which blobs in the db shall be loaded. Must be "
+        "the same length as number of output blobs.");
 
 OPERATOR_SCHEMA(Save)
     .NumInputs(1, INT_MAX)
@@ -119,10 +144,11 @@ counter). This is determined whether we need to do checkpointing.
         "(int, default 1) the checkpointing is carried out when "
         "(iter mod every) is zero.");
 
+OPERATOR_SCHEMA(Snapshot);
+
 NO_GRADIENT(Load);
 SHOULD_NOT_DO_GRADIENT(DBExists);
 SHOULD_NOT_DO_GRADIENT(Save);
 SHOULD_NOT_DO_GRADIENT(Checkpoint);
 SHOULD_NOT_DO_GRADIENT(Snapshot);
-}  // namespace
 }  // namespace caffe2

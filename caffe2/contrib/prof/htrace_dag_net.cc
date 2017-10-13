@@ -1,7 +1,23 @@
+/**
+ * Copyright (c) 2016-present, Facebook, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include <htrace.hpp>
 
 #include "caffe2/contrib/prof/htrace_conf.h"
-#include "caffe2/core/net.h"
+#include "caffe2/core/net_dag.h"
 #include "caffe2/core/operator.h"
 
 namespace caffe2 {
@@ -9,8 +25,9 @@ namespace {
 
 class HTraceDAGNet : public DAGNetBase {
  public:
-  HTraceDAGNet(const NetDef& net_def, Workspace* ws) : DAGNetBase(net_def, ws) {
-    VLOG(1) << "Constructing HTrace DAG Net " << net_def.name();
+  HTraceDAGNet(const std::shared_ptr<const NetDef>& net_def, Workspace* ws)
+      : DAGNetBase(net_def, ws) {
+    VLOG(1) << "Constructing HTrace DAG Net " << net_def->name();
 
     for (auto& worker : workers_) {
       std::thread::id worker_id = worker.get_id();
@@ -21,12 +38,16 @@ class HTraceDAGNet : public DAGNetBase {
     }
   }
 
-  bool Run() override {
+  bool SupportsAsync() override {
+    return false;
+  }
+
+  bool RunAsync() override {
     htrace::Scope run_scope(
         htrace_tracer_,
         htrace_root_scope_.GetSpanId(),
         "run-scope-" + caffe2::to_string(run_count_++));
-    return DAGNetBase::Run();
+    return DAGNetBase::RunAsync();
   }
 
   ~HTraceDAGNet() {
@@ -48,10 +69,12 @@ class HTraceDAGNet : public DAGNetBase {
 
     bool success = true;
     for (const auto idx : chain) {
-      auto def = operator_nodes_[idx].operator_->def();
+      const auto& op = operator_nodes_[idx].operator_;
+      const auto& def = op->debug_def();
       const string& print_name =
-          (def.name().size() ? def.name() : (def.output_size() ? def.output(0)
-                                                               : "NO_OUTPUT"));
+          (def.name().size()
+               ? def.name()
+               : (op->OutputSize() ? def.output(0) : "NO_OUTPUT"));
       const string& op_type = def.type();
 
       htrace::Scope operator_scope(

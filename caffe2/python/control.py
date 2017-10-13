@@ -1,3 +1,18 @@
+# Copyright (c) 2016-present, Facebook, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+##############################################################################
+
 ## @package control
 # Module caffe2.python.control
 """
@@ -17,6 +32,7 @@ from __future__ import print_function
 from __future__ import unicode_literals
 
 from caffe2.python import core
+from future.utils import viewitems
 
 
 # Used to generate names of the steps created by the control functions.
@@ -200,7 +216,7 @@ def MergeConditionNets(name, condition_nets, relation):
         else:
             last_cond = merged_net.__getattr__(relation)([last_cond, curr_cond])
         # merge attributes
-        for k, v in condition_nets[i]._attr_dict.items():
+        for k, v in viewitems(condition_nets[i]._attr_dict):
             merged_net._attr_dict[k] += v
 
     merged_net.AddExternalOutput(last_cond)

@@ -1,30 +1,46 @@
-#include <cmath>
+/**
+ * Copyright (c) 2016-present, Facebook, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 #include "caffe2/operators/elementwise_op.h"
+#include "caffe2/utils/math.h"
 
 namespace caffe2 {
 
 struct SigmoidCPUFunctor {
   template <typename T>
-  inline void operator()(const int n, const T* x,
-                         T* y, CPUContext* device_context) {
-    for (int i = 0; i < n; ++i) {
-      y[i] = 1. / (1. + exp(-x[i]));
-    }
+  inline void
+  operator()(const int n, const T* x, T* y, CPUContext* /*device_context*/) {
+    ConstEigenVectorArrayMap<T> xM(x, n);
+    EigenVectorArrayMap<T>(y, n) = 1. / (1. + (-xM).exp());
   }
 };
 
 struct SigmoidGradientCPUFunctor {
   template <typename T>
-  inline void
-  Run(const int n, const T* y, const T* dy, T* dx, CPUContext* device_context) {
-    for (int i = 0; i < n; ++i) {
-      dx[i] = dy[i] * y[i] * (1. - y[i]);
-    }
+  inline void Run(
+      const int n,
+      const T* y,
+      const T* dy,
+      T* dx,
+      CPUContext* /*device_context*/) {
+    ConstEigenVectorArrayMap<T> yM(y, n), dyM(dy, n);
+    EigenVectorArrayMap<T>(dx, n) = dyM * yM * (1. - yM);
   }
 };
 
-namespace {
 REGISTER_CPU_OPERATOR(
     Sigmoid, UnaryElementwiseOp<
         TensorTypes<float>, CPUContext, SigmoidCPUFunctor>);
@@ -68,5 +84,4 @@ class GetSigmoidGradient : public GradientMakerBase {
   }
 };
 REGISTER_GRADIENT(Sigmoid, GetSigmoidGradient);
-}  // namespace
 }  // namespace caffe2

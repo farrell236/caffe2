@@ -1,3 +1,19 @@
+/**
+ * Copyright (c) 2016-present, Facebook, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #ifndef CAFFE2_CORE_CONTEXT_GPU_H_
 #define CAFFE2_CORE_CONTEXT_GPU_H_
 
@@ -15,8 +31,7 @@ namespace caffe2 {
 
 enum class CudaMemoryPoolType {
   NONE = 0,
-  CNMEM = 1,
-  CUB = 2,
+  CUB = 1,
 };
 
 /**
@@ -25,7 +40,6 @@ enum class CudaMemoryPoolType {
  * The memory pool is set up during caffe2's global initialization time.
  */
 CudaMemoryPoolType GetCudaMemoryPoolType();
-
 
 /**
  * A struct to host thread-local cuda objects.
@@ -106,26 +120,31 @@ class CUDAContext final {
     if (curand_generator_) {
       CURAND_ENFORCE(curandDestroyGenerator(curand_generator_));
     }
-    CAFFE_ENFORCE(FinishDeviceComputation());
+    FinishDeviceComputation();
   }
 
   inline void SwitchToDevice(int stream_id) {
     set_stream_id(stream_id);
-    CUDA_ENFORCE(cudaSetDevice(gpu_id_));
+    CaffeCudaSetDevice(gpu_id_);
   }
   inline void SwitchToDevice() {
     SwitchToDevice(0);
   }
 
-  bool FinishDeviceComputation() {
+  inline void WaitEvent(const Event& ev) {
+    ev.Wait(CUDA, this);
+  }
+
+  inline void Record(Event* ev) const {
+    CAFFE_ENFORCE(ev, "Event must not be null.");
+    ev->Record(CUDA, this);
+  }
+
+  void FinishDeviceComputation() {
     cudaStreamSynchronize(cuda_objects_.GetStream(gpu_id_, stream_id_));
     cudaError_t error = cudaGetLastError();
-    if (error == cudaSuccess) {
-      return true;
-    } else {
-      LOG(ERROR) << "Encountered CUDA error: "
-                      << cudaGetErrorString(error);
-      return false;
+    if (error != cudaSuccess) {
+      CAFFE_THROW("Encountered CUDA error: ", cudaGetErrorString(error));
     }
   }
 
@@ -160,10 +179,7 @@ class CUDAContext final {
     return curand_generator_;
   }
 
-  static void* New(size_t nbytes);
-
-  static void Delete(void* data);
-
+  static std::pair<void*, MemoryDeleter> New(size_t nbytes);
 
   // Get a mutex to lock out cudaMalloc / cudaFree calls when
   // NCCL kernels are being launched. Should remove threat of
@@ -199,11 +215,12 @@ class CUDAContext final {
     CopyBytes<SrcContext, DstContext>(n * meta.itemsize(), src, dst);
   }
 
+ protected:
+  static void Delete(void* data);
   void set_stream_id(int stream_id) {
     stream_id_ = stream_id;
   }
 
- protected:
   int gpu_id_;
   int stream_id_ = 0;
   int random_seed_;
@@ -240,15 +257,21 @@ inline void CPUContext::CopyBytes<CPUContext, CUDAContext>(
  */
 struct PinnedCPUAllocator final : CPUAllocator {
   PinnedCPUAllocator() {}
-  ~PinnedCPUAllocator() {}
-  void* New(size_t nbytes) override {
+  ~PinnedCPUAllocator() override {}
+  std::pair<void*, MemoryDeleter> New(size_t nbytes) override {
     void* data;
     std::lock_guard<std::mutex> lock(CUDAContext::mutex());
     CUDA_ENFORCE(cudaMallocHost(&data, nbytes));
     memset(data, 0, nbytes);
-    return data;
+    return {data, Delete};
   }
-  void Delete(void* data) override {
+
+  MemoryDeleter GetDeleter() override {
+    return Delete;
+  }
+
+ private:
+  static void Delete(void* data) {
     // Caffe2 uses a lazy way to figure out if one is actually going to use GPUs
     // or not. If a CUDAContext::New() call is made, inside the CUDAContext
     // function we will switch the cpu side allocator to a PinnedCPUAllocator.

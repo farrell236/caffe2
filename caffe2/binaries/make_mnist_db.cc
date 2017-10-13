@@ -1,3 +1,19 @@
+/**
+ * Copyright (c) 2016-present, Facebook, Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 // This script converts the MNIST dataset to leveldb.
 // The MNIST dataset could be downloaded at
 //    http://yann.lecun.com/exdb/mnist/
@@ -43,6 +59,11 @@ void convert_dataset(const char* image_filename, const char* label_filename,
 
   image_file.read(reinterpret_cast<char*>(&magic), 4);
   magic = swap_endian(magic);
+  if (magic == 529205256) {
+    LOG(FATAL) << 
+        "It seems that you forgot to unzip the mnist dataset. You should "
+        "first unzip them using e.g. gunzip on Linux.";
+  }
   CAFFE_ENFORCE_EQ(magic, 2051, "Incorrect image file magic.");
   label_file.read(reinterpret_cast<char*>(&magic), 4);
   magic = swap_endian(magic);
